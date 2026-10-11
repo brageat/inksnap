@@ -4,6 +4,9 @@
 ; watches the green dot circling the ring and presses Space
 ; right as it lines up with the red zone.
 
+Version := "1.1.0"
+RepoUrl := "https://github.com/brageat/tugsnap"
+
 SetKeyDelay -1
 ProcessSetPriority "High"
 
@@ -57,6 +60,8 @@ DarkCb := G.AddCheckbox("xs Checked" DarkMode, "Dark mode")
 DarkCb.OnEvent("Click", (*) => (IniWrite(DarkCb.Value, IniFile, "Settings", "DarkMode"), Reload()))
 G.SetFont("s8 cGray")
 NoteTxt := G.AddText("xs w240", "Only presses Space while Roblox is focused.`nTiming tunes itself over the first few tugs.")
+VersionLink := G.AddLink("xs w240", "v" Version " · Checking for updates...")
+VersionLink.OnEvent("Click", (*) => Run(RepoUrl "/releases/latest"))
 if DarkMode
     ApplyDarkMode(G)
 UpdateTimingText()
@@ -80,6 +85,46 @@ WinSetTransparent 215, Hud
 UpdateStats()
 PlaceHud()
 SetTimer UpdateStats, 1000
+
+; ---------- update check ----------
+SetTimer CheckForUpdate, -1500           ; after the menu has appeared
+
+CheckForUpdate() {
+    try {
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(3000, 3000, 3000, 3000)
+        req.Open("GET", "https://api.github.com/repos/brageat/tugsnap/releases/latest", false)
+        req.SetRequestHeader("User-Agent", "TugSnap")
+        req.Send()
+        if (req.Status != 200 || !RegExMatch(req.ResponseText, '"tag_name"\s*:\s*"v?([\d.]+)"', &m))
+            throw Error("bad response")
+        latest := m[1]
+    } catch {
+        VersionLink.Text := "v" Version " · Couldn't check for updates (<a>open page</a>)"
+        return
+    }
+    if (CompareVersions(latest, Version) <= 0) {
+        VersionLink.Text := "v" Version " · Up to date"
+        return
+    }
+    VersionLink.Text := "v" Version " · <a>Update available: v" latest " - download</a>"
+    if MsgBox("A new version of TugSnap is available!`n`n"
+            . "You have:  v" Version "`nNewest:    v" latest "`n`n"
+            . "Open the download page?", "TugSnap update", "YesNo Iconi Owner" G.Hwnd) = "Yes"
+        Run RepoUrl "/releases/latest"
+}
+
+; Returns >0 if a is newer than b, <0 if older, 0 if equal ("1.2.0" style).
+CompareVersions(a, b) {
+    pa := StrSplit(a, "."), pb := StrSplit(b, ".")
+    loop Max(pa.Length, pb.Length) {
+        x := A_Index <= pa.Length ? Integer(pa[A_Index]) : 0
+        y := A_Index <= pb.Length ? Integer(pb[A_Index]) : 0
+        if (x != y)
+            return x - y
+    }
+    return 0
+}
 
 UpdateTimingText() => TimingTxt.Value := "Pressing " Round(LatencyMs) " ms early`n"
     . "Accuracy: " (AvgError = "" ? "learning..." : "±" Round(AvgError) " ms")
@@ -146,6 +191,8 @@ ApplyDarkMode(g) {
             case "Text":
                 if (ctl != StatusTxt)
                     ctl.SetFont(ctl = NoteTxt ? "c8A8A8A" : "cE6E6E6")
+            case "Link":
+                ctl.SetFont("c8A8A8A")
         }
     }
 }
