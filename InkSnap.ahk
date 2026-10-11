@@ -1,13 +1,13 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-; TugSnap - auto play for Ink Game minigames:
+; InkSnap - auto play for Ink Game minigames:
 ; Tug of war - watches the green dot circling the ring and presses Space
 ;              right as it lines up with the red zone.
 ; Mingle     - Power Hold key checks: reads the key on each button and presses it
 ;              as the shrinking circle reaches the red ring.
 
 Version := "1.2.0"
-RepoUrl := "https://github.com/brageat/tugsnap"
+RepoUrl := "https://github.com/brageat/inksnap"
 
 SetKeyDelay -1
 ProcessSetPriority "High"
@@ -21,7 +21,9 @@ GroupAdd "Roblox", "ahk_exe RobloxPlayerBeta.exe"
 GroupAdd "Roblox", "ahk_exe Windows10Universal.exe"
 
 ; ---------- saved settings ----------
-IniFile   := A_ScriptDir "\TugSnap.ini"
+IniFile   := A_ScriptDir "\InkSnap.ini"
+if !FileExist(IniFile) && FileExist(A_ScriptDir "\TugSnap.ini")
+    FileCopy A_ScriptDir "\TugSnap.ini", IniFile     ; keep settings from when this was called TugSnap
 ToggleKey := IniRead(IniFile, "Settings", "ToggleKey", "F6")
 ; how early to press (ms); learned automatically from where each tug lands
 LatencyMs := Float(IniRead(IniFile, "Settings", "LatencyMs", 30))
@@ -42,7 +44,7 @@ global AvgError := "", LastError := ""   ; how far off-center recent tugs landed
 global QteHits := 0                      ; Mingle key checks pressed
 
 ; ---------- menu ----------
-G := Gui("-MaximizeBox", "TugSnap")
+G := Gui("-MaximizeBox", "InkSnap")
 G.SetFont("s10", "Segoe UI")
 G.OnEvent("Close", (*) => ExitApp())
 G.SetFont("s16 bold")
@@ -54,8 +56,8 @@ StartBtn.OnEvent("Click", ToggleBot)
 G.AddGroupBox("w240 h52 Section", "Games")
 TugCb := G.AddCheckbox("xs+10 ys+22 Checked" TugOn, "Tug of war")
 MingleCb := G.AddCheckbox("x+20 yp Checked" MingleOn, "Mingle")
-TugCb.OnEvent("Click", (*) => IniWrite(TugCb.Value, IniFile, "Settings", "TugOfWar"))
-MingleCb.OnEvent("Click", (*) => IniWrite(MingleCb.Value, IniFile, "Settings", "Mingle"))
+TugCb.OnEvent("Click", GamesChanged)
+MingleCb.OnEvent("Click", GamesChanged)
 
 G.AddGroupBox("xs w240 h70 Section", "Timing (automatic)")
 TimingTxt := G.AddText("xs+10 ys+22 w220 r2", "")
@@ -88,13 +90,15 @@ WinMove A_ScreenWidth - gw - 40, Round(A_ScreenHeight * 0.3),,, G
 G.Show()
 
 ; ---------- stats HUD (click-through overlay) ----------
-Hud := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "TugSnap HUD")
+Hud := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20", "InkSnap HUD")
 Hud.BackColor := "15181D"
 Hud.MarginX := 10, Hud.MarginY := 8
 Hud.SetFont("s10 bold cRed", "Consolas")
-HudStatus := Hud.AddText("w200", "● TUGSNAP OFF")
+HudStatus := Hud.AddText("w200", "● INKSNAP OFF")
 Hud.SetFont("s9 norm cE6E6E6")
 HudBody := Hud.AddText("w200 r9", "")
+HudBody.GetPos(,,, &hb)
+HudLineH := hb / 9, HudLines := 9      ; the body is resized to fit the stats of the picked games
 WinSetTransparent 215, Hud
 UpdateStats()
 PlaceHud()
@@ -107,8 +111,8 @@ CheckForUpdate() {
     try {
         req := ComObject("WinHttp.WinHttpRequest.5.1")
         req.SetTimeouts(3000, 3000, 3000, 3000)
-        req.Open("GET", "https://api.github.com/repos/brageat/tugsnap/releases/latest", false)
-        req.SetRequestHeader("User-Agent", "TugSnap")
+        req.Open("GET", "https://api.github.com/repos/brageat/inksnap/releases/latest", false)
+        req.SetRequestHeader("User-Agent", "InkSnap")
         req.Send()
         if (req.Status != 200 || !RegExMatch(req.ResponseText, '"tag_name"\s*:\s*"v?([\d.]+)"', &m))
             throw Error("bad response")
@@ -122,9 +126,9 @@ CheckForUpdate() {
         return
     }
     VersionLink.Text := "v" Version " · <a>Update available: v" latest " - download</a>"
-    if MsgBox("A new version of TugSnap is available!`n`n"
+    if MsgBox("A new version of InkSnap is available!`n`n"
             . "You have:  v" Version "`nNewest:    v" latest "`n`n"
-            . "Open the download page?", "TugSnap update", "YesNo Iconi Owner" G.Hwnd) = "Yes"
+            . "Open the download page?", "InkSnap update", "YesNo Iconi Owner" G.Hwnd) = "Yes"
         Run RepoUrl "/releases/latest"
 }
 
@@ -145,18 +149,42 @@ UpdateTimingText() => TimingTxt.Value := "Pressing " Round(LatencyMs) " ms early
 
 FmtMs(v) => (v >= 0 ? "+" : "") Round(v) " ms"
 
+GamesChanged(*) {
+    IniWrite TugCb.Value, IniFile, "Settings", "TugOfWar"
+    IniWrite MingleCb.Value, IniFile, "Settings", "Mingle"
+    UpdateStats()
+}
+
+; Shows only the stats of the games that are turned on.
 UpdateStats() {
-    StatsTxt.Value := "Tugs: " Hits "    Dot speed: " LastSpeed "°/s"
+    global HudLines
+    tug := TugCb.Value, mingle := MingleCb.Value
+    StatsTxt.Value := !(tug || mingle) ? "No games picked"
+        : (tug ? "Tugs: " Hits (mingle ? "    " : "") : "") (mingle ? "Mingle keys: " QteHits : "")
     secs := (ActiveMs + (Active ? A_TickCount - ActiveSince : 0)) // 1000
-    HudBody.Value := "Tugs:        " Hits "`n"
-                   . "Rounds:      " Rounds "`n"
-                   . "Tugs/min:    " (secs >= 10 ? Round(Hits * 60 / secs) : "-") "`n"
-                   . "Dot speed:   " (LastSpeed ? LastSpeed "°/s" : "-") "`n"
-                   . "Top speed:   " (TopSpeed ? TopSpeed "°/s" : "-") "`n"
-                   . "Mingle keys: " QteHits "`n"
-                   . "Timing:      " Round(LatencyMs) " ms early`n"
-                   . "Last tug:    " (LastError = "" ? "-" : FmtMs(LastError) (LastError > 0 ? " late" : " early")) "`n"
-                   . "Run time:    " Format("{:02}:{:02}", secs // 60, Mod(secs, 60))
+    lines := []
+    if tug
+        lines.Push("Tugs:        " Hits
+            , "Rounds:      " Rounds
+            , "Tugs/min:    " (secs >= 10 ? Round(Hits * 60 / secs) : "-")
+            , "Dot speed:   " (LastSpeed ? LastSpeed "°/s" : "-")
+            , "Top speed:   " (TopSpeed ? TopSpeed "°/s" : "-")
+            , "Last tug:    " (LastError = "" ? "-" : FmtMs(LastError) (LastError > 0 ? " late" : " early")))
+    if mingle
+        lines.Push("Mingle keys: " QteHits)
+    if !(tug || mingle)
+        lines.Push("No games picked")
+    lines.Push("Timing:      " Round(LatencyMs) " ms early"
+        , "Run time:    " Format("{:02}:{:02}", secs // 60, Mod(secs, 60)))
+    text := ""
+    for l in lines
+        text .= (A_Index > 1 ? "`n" : "") l
+    HudBody.Value := text
+    if (lines.Length != HudLines) {
+        HudLines := lines.Length
+        HudBody.Move(,,, Round(HudLineH * HudLines))
+        PlaceHud()
+    }
 }
 
 PlaceHud() {
@@ -221,7 +249,7 @@ ToggleBot(*) {
     StatusTxt.Value := Active ? "ON" : "OFF"
     StatusTxt.SetFont(Active ? "cGreen" : "cRed")
     StartBtn.Text := (Active ? "Stop" : "Start") "  (" ToggleKey ")"
-    HudStatus.Value := Active ? "● TUGSNAP ON" : "● TUGSNAP OFF"
+    HudStatus.Value := Active ? "● INKSNAP ON" : "● INKSNAP OFF"
     HudStatus.SetFont(Active ? "c3DDC84" : "cRed")
     UpdateStats()
     if Active
