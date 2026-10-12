@@ -1,12 +1,10 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-; InkSnap - auto play for Ink Game minigames:
-; Tug of war - watches the green dot circling the ring and presses Space
-;              right as it lines up with the red zone.
-; Mingle     - Power Hold key checks: reads the key on each button and presses it
-;              as the shrinking circle reaches the red ring.
+; InkSnap - auto tug for Ink Game's tug of war:
+; watches the green dot circling the ring and presses Space
+; right as it lines up with the red zone.
 
-Version := "1.2.0"
+Version := "1.3.0"
 RepoUrl := "https://github.com/brageat/inksnap"
 
 SetKeyDelay -1
@@ -31,17 +29,11 @@ DarkMode  := IniRead(IniFile, "Settings", "DarkMode", 1) = 1
 ShowHud   := IniRead(IniFile, "Settings", "ShowHud", 1) = 1
 HudPos    := IniRead(IniFile, "Settings", "HudPos", "Bottom-right")
 HudPositions := ["Top-left", "Top-right", "Bottom-left", "Bottom-right"]
-TugOn     := IniRead(IniFile, "Settings", "TugOfWar", 1) = 1
-MingleOn  := IniRead(IniFile, "Settings", "Mingle", 1) = 1
-; Mingle: press when the shrinking circle's radius is this many times the red ring's inner radius
-; (the ring itself spans about 1.0-1.45)
-MingleTarget := Float(IniRead(IniFile, "Settings", "MingleTarget", 1.3))
 
 global Active := false
 ; stats
 global Hits := 0, Rounds := 0, LastSpeed := 0, TopSpeed := 0, ActiveMs := 0, ActiveSince := 0
 global AvgError := "", LastError := ""   ; how far off-center recent tugs landed (ms)
-global QteHits := 0                      ; Mingle key checks pressed
 
 ; ---------- menu ----------
 G := Gui("-MaximizeBox", "InkSnap")
@@ -53,13 +45,7 @@ G.SetFont("s10 norm")
 StartBtn := G.AddButton("w240 h34", "Start  (" ToggleKey ")")
 StartBtn.OnEvent("Click", ToggleBot)
 
-G.AddGroupBox("w240 h52 Section", "Games")
-TugCb := G.AddCheckbox("xs+10 ys+22 Checked" TugOn, "Tug of war")
-MingleCb := G.AddCheckbox("x+20 yp Checked" MingleOn, "Mingle")
-TugCb.OnEvent("Click", GamesChanged)
-MingleCb.OnEvent("Click", GamesChanged)
-
-G.AddGroupBox("xs w240 h70 Section", "Timing (automatic)")
+G.AddGroupBox("w240 h70 Section", "Timing (automatic)")
 TimingTxt := G.AddText("xs+10 ys+22 w220 r2", "")
 
 G.AddGroupBox("xs w240 h90 Section", "HUD")
@@ -75,7 +61,7 @@ StatsTxt := G.AddText("xs w240", "")
 DarkCb := G.AddCheckbox("xs Checked" DarkMode, "Dark mode")
 DarkCb.OnEvent("Click", (*) => (IniWrite(DarkCb.Value, IniFile, "Settings", "DarkMode"), Reload()))
 G.SetFont("s8 cGray")
-NoteTxt := G.AddText("xs w240", "Only presses keys while Roblox is focused.`nTiming tunes itself over the first few tugs.")
+NoteTxt := G.AddText("xs w240", "Only presses Space while Roblox is focused.`nTiming tunes itself over the first few tugs.")
 VersionLink := G.AddLink("xs w240", "v" Version " · Checking for updates...")
 VersionLink.OnEvent("Click", (*) => Run(RepoUrl "/releases/latest"))
 if DarkMode
@@ -96,9 +82,7 @@ Hud.MarginX := 10, Hud.MarginY := 8
 Hud.SetFont("s10 bold cRed", "Consolas")
 HudStatus := Hud.AddText("w200", "● INKSNAP OFF")
 Hud.SetFont("s9 norm cE6E6E6")
-HudBody := Hud.AddText("w200 r9", "")
-HudBody.GetPos(,,, &hb)
-HudLineH := hb / 9, HudLines := 9      ; the body is resized to fit the stats of the picked games
+HudBody := Hud.AddText("w200 r8", "")
 WinSetTransparent 215, Hud
 UpdateStats()
 PlaceHud()
@@ -149,42 +133,17 @@ UpdateTimingText() => TimingTxt.Value := "Pressing " Round(LatencyMs) " ms early
 
 FmtMs(v) => (v >= 0 ? "+" : "") Round(v) " ms"
 
-GamesChanged(*) {
-    IniWrite TugCb.Value, IniFile, "Settings", "TugOfWar"
-    IniWrite MingleCb.Value, IniFile, "Settings", "Mingle"
-    UpdateStats()
-}
-
-; Shows only the stats of the games that are turned on.
 UpdateStats() {
-    global HudLines
-    tug := TugCb.Value, mingle := MingleCb.Value
-    StatsTxt.Value := !(tug || mingle) ? "No games picked"
-        : (tug ? "Tugs: " Hits (mingle ? "    " : "") : "") (mingle ? "Mingle keys: " QteHits : "")
+    StatsTxt.Value := "Tugs: " Hits "    Dot speed: " LastSpeed "°/s"
     secs := (ActiveMs + (Active ? A_TickCount - ActiveSince : 0)) // 1000
-    lines := []
-    if tug
-        lines.Push("Tugs:        " Hits
-            , "Rounds:      " Rounds
-            , "Tugs/min:    " (secs >= 10 ? Round(Hits * 60 / secs) : "-")
-            , "Dot speed:   " (LastSpeed ? LastSpeed "°/s" : "-")
-            , "Top speed:   " (TopSpeed ? TopSpeed "°/s" : "-")
-            , "Last tug:    " (LastError = "" ? "-" : FmtMs(LastError) (LastError > 0 ? " late" : " early")))
-    if mingle
-        lines.Push("Mingle keys: " QteHits)
-    if !(tug || mingle)
-        lines.Push("No games picked")
-    lines.Push("Timing:      " Round(LatencyMs) " ms early"
-        , "Run time:    " Format("{:02}:{:02}", secs // 60, Mod(secs, 60)))
-    text := ""
-    for l in lines
-        text .= (A_Index > 1 ? "`n" : "") l
-    HudBody.Value := text
-    if (lines.Length != HudLines) {
-        HudLines := lines.Length
-        HudBody.Move(,,, Round(HudLineH * HudLines))
-        PlaceHud()
-    }
+    HudBody.Value := "Tugs:        " Hits "`n"
+                   . "Rounds:      " Rounds "`n"
+                   . "Tugs/min:    " (secs >= 10 ? Round(Hits * 60 / secs) : "-") "`n"
+                   . "Dot speed:   " (LastSpeed ? LastSpeed "°/s" : "-") "`n"
+                   . "Top speed:   " (TopSpeed ? TopSpeed "°/s" : "-") "`n"
+                   . "Timing:      " Round(LatencyMs) " ms early`n"
+                   . "Last tug:    " (LastError = "" ? "-" : FmtMs(LastError) (LastError > 0 ? " late" : " early")) "`n"
+                   . "Run time:    " Format("{:02}:{:02}", secs // 60, Mod(secs, 60))
 }
 
 PlaceHud() {
@@ -209,7 +168,7 @@ SaveHudSettings() {
 }
 
 ResetStats(*) {
-    global Hits := 0, Rounds := 0, LastSpeed := 0, TopSpeed := 0, ActiveMs := 0, LastError := "", QteHits := 0
+    global Hits := 0, Rounds := 0, LastSpeed := 0, TopSpeed := 0, ActiveMs := 0, LastError := ""
     global ActiveSince := A_TickCount
     UpdateStats()
 }
@@ -259,7 +218,6 @@ ToggleBot(*) {
 ; ---------- screen capture (one BitBlt of the ring area per tick) ----------
 global MemDC := 0, Bmp := 0, OldBmp := 0, Bits := 0, CapSize := 0, CapX := 0, CapY := 0
 global DotOff := [], ZoneOff := [], CosT := [], SinT := [], GeoKey := ""
-global CliX := 0, CliY := 0, CliW := 0, CliH := 0      ; Roblox client area
 
 loop 360 {
     a := (A_Index - 1) * 0.0174533
@@ -272,7 +230,6 @@ UpdateGeometry() {
     local wx, wy, ww, wh, cx, cy, dr, zr, box, key
     WinGetClientPos &wx, &wy, &ww, &wh, "ahk_group Roblox"
     key := wx "," wy "," ww "," wh
-    CliX := wx, CliY := wy, CliW := ww, CliH := wh
     if (key = GeoKey)
         return
     GeoKey := key
@@ -335,13 +292,6 @@ RunBot() {
             continue
         }
         UpdateGeometry()
-        if !TugCb.Value {
-            if MingleCb.Value
-                MingleTick()
-            else
-                Sleep 50
-            continue
-        }
         t := Now()
         tickMs := tickMs * 0.8 + Min(t - prevT, 50) * 0.2
         prevT := t
@@ -357,10 +307,7 @@ RunBot() {
         ; no minigame on screen, or the dot is reversing / the zone moving right after a tug
         if (dot = "" || zone = "" || t - lastPress < 120) {
             omega := 0, refA := "", lastZone := ""
-            if (dot = "" && MingleCb.Value)
-                MingleTick()                 ; no tug ring: look for Mingle key checks instead
-            else
-                Sleep dot = "" ? 30 : 1
+            Sleep dot = "" ? 30 : 1
             continue
         }
         ; dot speed in degrees per ms (signed: + = clockwise)
@@ -443,244 +390,6 @@ LearnTiming(err) {
 }
 
 SaveTiming() => IniWrite(Round(LatencyMs, 1), IniFile, "Settings", "LatencyMs")
-
-; ---------- Mingle: Power Hold key checks ----------
-; Each check is a white button showing a key (R, G, F, Q or E) inside a red ring. A see-through
-; circle shrinks onto the ring, and the key has to be pressed while it overlaps the ring.
-; Buttons can show up anywhere on screen, several at once.
-global MDC := 0, MBmp := 0, MOld := 0, MBits := 0, MW := 0, MH := 0, MX := 0, MY := 0
-global Qtes := [], MingleTickMs := 30
-
-; 6x6 letter shapes (# filled, + partly, . empty), measured from real Power Hold buttons.
-; G never showed up in the footage, so its shape comes from Arial Bold.
-LetterShapes := Map(
-    "f", "######" "##...." "##+++." "#####+" "##...." "##....",
-    "e", "#####+" "##...." "#####." "####+." "###++." "######",
-    "r", "#####+" "##..##" "##..##" "#####+" "##+##." "##..##",
-    "q", ".####." "##..##" "#+..+#" "##++##" ".###+." "...###",
-    "g", ".####+" "##..##" "#+..++" "#+.###" "##..+#" ".####+")
-
-; Captures the whole Roblox client area.
-MGrab() {
-    global
-    if (CliW != MW || CliH != MH) {
-        if !MDC
-            MDC := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
-        if MBmp
-            DllCall("SelectObject", "Ptr", MDC, "Ptr", MOld), DllCall("DeleteObject", "Ptr", MBmp)
-        local bi := Buffer(40, 0)
-        NumPut("UInt", 40, bi, 0), NumPut("Int", CliW, bi, 4), NumPut("Int", -CliH, bi, 8)   ; top-down
-        NumPut("UShort", 1, bi, 12), NumPut("UShort", 32, bi, 14)
-        MBmp := DllCall("CreateDIBSection", "Ptr", MDC, "Ptr", bi, "UInt", 0, "Ptr*", &MBits := 0, "Ptr", 0, "UInt", 0, "Ptr")
-        MOld := DllCall("SelectObject", "Ptr", MDC, "Ptr", MBmp, "Ptr")
-        MW := CliW, MH := CliH
-    }
-    local sdc := DllCall("GetDC", "Ptr", 0, "Ptr")
-    DllCall("BitBlt", "Ptr", MDC, "Int", 0, "Int", 0, "Int", MW, "Int", MH
-        , "Ptr", sdc, "Int", CliX, "Int", CliY, "UInt", 0x00CC0020)
-    DllCall("ReleaseDC", "Ptr", 0, "Ptr", sdc)
-}
-
-MPx(x, y) {
-    x := Round(x), y := Round(y)
-    return (x < 0 || y < 0 || x >= MW || y >= MH) ? 0 : NumGet(MBits, (y * MW + x) * 4, "UInt")
-}
-IsRedC(c) => ((c >> 16) & 0xFF) > 170 && ((c >> 16) & 0xFF) - ((c >> 8) & 0xFF) > 55 && ((c >> 16) & 0xFF) - (c & 0xFF) > 45
-Bright(c) => (((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF)) / 3
-
-MingleTick() {
-    global QteHits, MingleTickMs
-    t := Now()
-    MGrab()
-    for q in FindQtes() {
-        known := 0
-        for k in Qtes
-            if (Abs(k.x - q.x) + Abs(k.y - q.y) < q.ri) {
-                known := k
-                break
-            }
-        if !known
-            Qtes.Push(known := {votes: Map(), key: "", pts: [], done: false})
-        known.x := q.x, known.y := q.y, known.ri := q.ri, known.seen := t
-    }
-    i := Qtes.Length
-    while (i >= 1) {
-        q := Qtes[i--]
-        ; forget checks that are gone; pressed ones linger a bit so their fading ring isn't pressed again
-        if (t - q.seen > (q.done ? 700 : 250)) {
-            Qtes.RemoveAt(i + 1)
-            continue
-        }
-        if (q.done || q.seen != t)
-            continue
-        ; read the key until the same letter shows up twice
-        if (q.key = "" && (k := ReadLetter(q)) != "") {
-            q.votes[k] := q.votes.Get(k, 0) + 1
-            if (q.votes[k] >= 2)
-                q.key := k
-        }
-        R := OuterRadius(q)
-        if (R > q.ri * 1.2 && R < q.ri * 3.5) {
-            q.pts.Push([t, R])
-            if (q.pts.Length > 6)
-                q.pts.RemoveAt(1)
-        }
-        if (q.key = "" || q.pts.Length < 3)
-            continue
-        ; shrink speed in px per ms; signs and other still rings never shrink
-        p0 := q.pts[1], p1 := q.pts[q.pts.Length]
-        v := (p0[2] - p1[2]) / (p1[1] - p0[1])
-        if (v < q.ri * 0.0002)
-            continue
-        wait := (p1[2] - q.ri * MingleTarget) / v - LatencyMs
-        if (wait > MingleTickMs * 1.5)
-            continue                     ; the next tick is soon enough
-        target := t + wait
-        while Now() < target
-            continue
-        PressKey(q.key)
-        q.done := true, QteHits++
-        UpdateStats()
-    }
-    MingleTickMs := MingleTickMs * 0.8 + Min(Now() - t, 100) * 0.2
-}
-
-; Finds Power Hold buttons: a white spot with red on all four sides, evenly spaced.
-FindQtes() {
-    found := [], probes := 0
-    step := Max(8, Round(MH * 0.01))     ; smaller than the smallest button
-    maxS := Round(MH * 0.06)
-    y := step
-    while (y < MH - step) {
-        row := y * MW * 4
-        x := step
-        while (x < MW - step) {
-            c := NumGet(MBits, row + x * 4, "UInt")
-            r := (c >> 16) & 0xFF, g := (c >> 8) & 0xFF, b := c & 0xFF
-            if (r > 205 && g > 205 && b > 205 && Max(r, g, b) - Min(r, g, b) < 20 && probes++ < 400) {
-                near := false
-                for f in found
-                    if (Abs(f.x - x) + Abs(f.y - y) < f.ri * 2)
-                        near := true
-                if (!near && (q := ProbeQte(x, y, maxS)))
-                    found.Push(q)
-            }
-            x += step
-        }
-        y += step
-    }
-    return found
-}
-
-ProbeQte(x, y, maxS) {
-    l := RedEdge(x, y, -1, 0, maxS), r := RedEdge(x, y, 1, 0, maxS)
-    if (l < 0 || r < 0)
-        return 0
-    cx := x + (r - l) // 2
-    u := RedEdge(cx, y, 0, -1, maxS), d := RedEdge(cx, y, 0, 1, maxS)
-    if (u < 0 || d < 0)
-        return 0
-    ri := (l + r + u + d) / 4            ; red ring's inner radius
-    if (ri < MH * 0.008 || Abs((l + r) - (u + d)) > ri * 0.25)
-        return 0
-    return {x: cx, y: y + (d - u) // 2, ri: ri}
-}
-
-; Distance to the first red pixel in a direction, or -1. Inside a button everything is
-; white/grey (button and letter) up to the pinkish ring, so another color first means this isn't one.
-RedEdge(x, y, dx, dy, maxS) {
-    loop maxS {
-        c := MPx(x + dx * A_Index, y + dy * A_Index)
-        if IsRedC(c)
-            return A_Index
-        r := (c >> 16) & 0xFF, g := (c >> 8) & 0xFF, b := c & 0xFF
-        if (Max(r, g, b) - Min(r, g, b) > 45 && r < Max(g, b))
-            return -1
-    }
-    return -1
-}
-
-; Radius of the shrinking see-through circle: its edge is where the image gets darker going outward.
-OuterRadius(q) {
-    rs := []
-    gap := Max(2, Round(q.ri / 12))
-    loop 8 {
-        a := (A_Index - 1) * 0.785398 + 0.2
-        ca := Cos(a), sa := Sin(a)
-        best := 0, bs := -1
-        s := Round(q.ri * 1.6)
-        while (s <= q.ri * 3.4) {
-            g := Bright(MPx(q.x + ca * (s - gap), q.y + sa * (s - gap))) - Bright(MPx(q.x + ca * (s + gap), q.y + sa * (s + gap)))
-            if (g > best)
-                best := g, bs := s
-            s++
-        }
-        if (best > 18)
-            rs.Push(bs)
-    }
-    if (rs.Length < 4)
-        return -1
-    ; median
-    loop rs.Length - 1 {
-        j := A_Index + 1
-        while (j > 1 && rs[j - 1] > rs[j])
-            tmp := rs[j], rs[j] := rs[j - 1], rs[j - 1] := tmp, j--
-    }
-    return rs[rs.Length // 2 + 1]
-}
-
-; Reads the key on a button by comparing its dark pixels to the letter shapes; "" if unsure.
-ReadLetter(q, &bestD := 0, &second := "") {
-    rad := q.ri * 0.75, st := Max(1, Floor(q.ri / 30))
-    pts := [], x0 := 1e9, x1 := -1e9, y0 := 1e9, y1 := -1e9
-    yy := -rad
-    while (yy <= rad) {
-        xx := -rad
-        while (xx <= rad) {
-            if (xx * xx + yy * yy <= rad * rad) {
-                c := MPx(q.x + xx, q.y + yy)
-                r := (c >> 16) & 0xFF, g := (c >> 8) & 0xFF, b := c & 0xFF
-                if ((r + g + b) / 3 < 150 && Max(r, g, b) - Min(r, g, b) < 40) {
-                    pts.Push([xx, yy])
-                    x0 := Min(x0, xx), x1 := Max(x1, xx), y0 := Min(y0, yy), y1 := Max(y1, yy)
-                }
-            }
-            xx += st
-        }
-        yy += st
-    }
-    if (pts.Length < 12)
-        return ""
-    w := x1 - x0 + st, h := y1 - y0 + st
-    grid := []
-    grid.Length := 36, grid.Default := 0
-    for p in pts {
-        gi := Min(5, Floor((p[2] - y0) / h * 6)) * 6 + Min(5, Floor((p[1] - x0) / w * 6)) + 1
-        grid[gi] += 1
-    }
-    cell := (w / st) * (h / st) / 36
-    bestKey := "", bestD := 1e9, nextD := 1e9
-    for key, shape in LetterShapes {
-        dist := 0
-        loop 36 {
-            ; same 3 levels as the shapes: filled, partly, empty
-            f := grid[A_Index] / cell
-            want := SubStr(shape, A_Index, 1)
-            dist += Abs((f > 0.5 ? 1 : f > 0.2 ? 0.5 : 0) - (want = "#" ? 1 : want = "+" ? 0.5 : 0))
-        }
-        if (dist < bestD)
-            nextD := bestD, second := bestKey, bestD := dist, bestKey := key
-        else if (dist < nextD)
-            nextD := dist, second := key
-    }
-    return bestD <= 6 ? bestKey : ""
-}
-
-PressKey(k) {
-    Send "{" k " down}"
-    Sleep 20
-    Send "{" k " up}"
-}
 
 ; High-resolution time in ms (A_TickCount is only ~15 ms accurate).
 Now() {

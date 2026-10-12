@@ -1,6 +1,6 @@
 # 🦑 InkSnap
 
-**Auto play for Ink Game minigames on Roblox.** InkSnap pulls for you in **tug of war** and presses the right keys in **Mingle**'s Power Hold.
+**Auto tug for Ink Game's tug of war on Roblox.** InkSnap watches the tug ring and presses Space the moment the green dot lines up with the red zone.
 
 > [!IMPORTANT]
 > ## ⚠️ You need AutoHotkey v2 to run InkSnap
@@ -8,14 +8,12 @@
 >
 > **👉 [Download AutoHotkey v2 here](https://www.autohotkey.com/)**: click **Download v2.0**, *not* v1.1.
 
-- 🪢 **Tug of war:** presses Space right as the green dot hits the middle of the red zone.
-- 🤼 **Mingle:** reads the key on each Power Hold button (R, G, F, Q or E) and presses it as the shrinking circle reaches the red ring. Handles several buttons at once, anywhere on screen.
-- ✅ **Pick your games.** Turn tug of war and Mingle on or off with a checkbox each.
+- 🎯 **Hits the red zone dead center**, even as the dot speeds up.
 - 🧠 **Timing tunes itself.** After every tug it checks where the press landed and corrects for your PC's input lag. Nothing to adjust.
-- 📊 **Mini stats HUD.** A click-through overlay that shows the stats for the games you've picked.
+- 📊 **Mini stats HUD.** A click-through overlay with tugs, rounds, tugs/min, dot speed, timing and run time.
 - 🌙 **Dark mode** and a small settings menu. Your settings are saved.
 - 🔔 **Update notifications** when a new version is out.
-- 🛡️ **Only presses keys while Roblox is focused**, so it never types into other windows.
+- 🛡️ **Only presses Space while Roblox is focused**, so it never types into other windows.
 
 ## Download and set up
 ### ⬇️ [Download the latest release](https://github.com/brageat/inksnap/releases/latest)
@@ -31,9 +29,8 @@
 
 ## Use
 1. Run Roblox **fullscreen** (normal or borderless).
-2. Tick the games you want in the menu.
-3. Press **F6** (or click **Start**). The HUD shows **● INKSNAP ON**.
-4. Play. The first few tugs fine-tune the timing.
+2. Press **F6** (or click **Start**). The HUD shows **● INKSNAP ON**.
+3. Join tug of war and let InkSnap pull. The first few tugs fine-tune the timing.
 
 ## Disclaimer
 Using macros may break Roblox's or the game's rules. Use at your own risk.
